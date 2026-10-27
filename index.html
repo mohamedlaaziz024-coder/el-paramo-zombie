@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Páramo — Supervivencia Zombie</title>
+<style>
+  :root{
+    --bg:#0a0908; --bg2:#12100e; --panel:#1a1512; --panel2:#241c17;
+    --ink:#e7e2db; --muted:#8a827a; --line:#3a2e26;
+    --blood:#b91c1c; --blood2:#7f1d1d; --rust:#b45309;
+    --hp:#ef4444; --food:#84cc16; --ammo:#f59e0b; --san:#8b5cf6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;min-height:100%;background:
+    radial-gradient(ellipse at top,#1a1210,#0a0908 70%);color:var(--ink);
+    font-family:"Georgia",system-ui,serif;}
+  .wrap{max-width:640px;margin:0 auto;padding:20px 16px 50px;}
+  header{text-align:center;margin-bottom:16px;}
+  header h1{margin:0;font-size:1.7rem;letter-spacing:2px;color:#d6cfc6;
+    text-shadow:0 0 12px rgba(185,28,28,.5);font-family:"Impact","Arial Black",sans-serif;}
+  header p{margin:4px 0 0;color:var(--muted);font-style:italic;font-size:.9rem;}
+
+  /* barras de recursos */
+  .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;}
+  .stat .row{display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:5px;}
+  .stat .row b{letter-spacing:.5px;}
+  .track{height:12px;background:#000;border-radius:7px;overflow:hidden;border:1px solid #000;}
+  .track i{display:block;height:100%;border-radius:7px;transition:width .5s ease, background .3s;}
+  .fill-hp{background:linear-gradient(90deg,#7f1d1d,var(--hp));}
+  .fill-food{background:linear-gradient(90deg,#3f6212,var(--food));}
+  .fill-ammo{background:linear-gradient(90deg,#92400e,var(--ammo));}
+  .fill-san{background:linear-gradient(90deg,#4c1d95,var(--san));}
+  .stat.low .track i{animation:pulse .8s infinite;}
+  @keyframes pulse{50%{filter:brightness(1.6);}}
+
+  /* tarjeta de escena */
+  .scene{background:linear-gradient(180deg,var(--panel),var(--bg2));
+    border:1px solid var(--line);border-radius:16px;padding:22px;
+    box-shadow:0 10px 40px rgba(0,0,0,.6),inset 0 0 40px rgba(0,0,0,.4);
+    position:relative;overflow:hidden;}
+  .scene::before{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.04) 4px);pointer-events:none;}
+  .scene.turn{animation:fadeIn .5s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
+  .tag{display:inline-block;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;
+    color:var(--blood);border:1px solid var(--blood2);border-radius:20px;padding:2px 10px;margin-bottom:10px;font-family:sans-serif;}
+  .narr{font-size:1.1rem;line-height:1.6;margin:0 0 20px;}
+  .day{float:right;color:var(--muted);font-size:.8rem;font-family:sans-serif;}
+
+  .opts{display:grid;gap:10px;}
+  .opt{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--rust);
+    border-radius:8px;padding:13px 15px;cursor:pointer;color:var(--ink);text-align:left;
+    font-family:system-ui,sans-serif;font-size:.98rem;transition:.15s;}
+  .opt:hover{background:#2e241d;border-left-color:var(--blood);transform:translateX(4px);}
+  .opt .cost{display:block;font-size:.76rem;color:var(--muted);margin-top:4px;}
+
+  /* fin de juego */
+  .ending .tag{color:var(--rust);border-color:var(--rust);}
+  .ending h2{margin:6px 0;font-size:1.5rem;}
+  button.restart{margin-top:8px;background:var(--blood);color:#fff;border:none;border-radius:10px;
+    padding:14px 26px;font-size:1rem;font-weight:700;cursor:pointer;font-family:sans-serif;letter-spacing:1px;}
+  button.restart:hover{background:#dc2626;}
+
+  /* historial */
+  .log{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+  .log h3{margin:0 0 8px;font-size:.85rem;letter-spacing:1px;color:var(--muted);font-family:sans-serif;text-transform:uppercase;}
+  .log ul{margin:0;padding:0;list-style:none;max-height:150px;overflow:auto;}
+  .log li{font-size:.85rem;padding:5px 0;border-bottom:1px dashed var(--line);color:#c9c1b8;font-family:system-ui,sans-serif;}
+  .log li:last-child{border:none;}
+  .log .delta{font-family:monospace;font-size:.78rem;}
+  .up{color:var(--food);} .down{color:var(--hp);}
+  .float{position:fixed;pointer-events:none;font-family:monospace;font-weight:700;font-size:1rem;
+    animation:floatUp 1s ease forwards;z-index:50;}
+  @keyframes floatUp{from{opacity:1;transform:translateY(0);}to{opacity:0;transform:translateY(-40px);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>EL PÁRAMO</h1>
+    <p>Día 1. El mundo cayó hace tres semanas. Tú sigues aquí.</p>
+  </header>
+
+  <div class="stats" id="stats"></div>
+  <div class="scene" id="scene"></div>
+
+  <div class="log">
+    <h3>📜 Registro de decisiones</h3>
+    <ul id="logList"><li>Aún no has tomado ninguna decisión.</li></ul>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+
+// ---------- Recursos ----------
+const META=[
+  {k:"hp",   name:"Salud",   emoji:"🩸", cls:"fill-hp"},
+  {k:"food", name:"Comida",  emoji:"🍎", cls:"fill-food"},
+  {k:"ammo", name:"Munición",emoji:"🔫", cls:"fill-ammo"},
+  {k:"san",  name:"Cordura", emoji:"🧠", cls:"fill-san"},
+];
+let R, day, log, current;
+
+function resetState(){
+  R={hp:100,food:70,ammo:40,san:80};
+  day=1; log=[]; current="inicio";
+  renderStats(); renderLog(); goto("inicio",true);
+}
+
+// ---------- Historia (nodos) ----------
+// e: efectos {hp,food,ammo,san}; to: siguiente nodo; end: final
+const STORY={
+  inicio:{ tag:"Amanecer", text:"Despiertas en un refugio improvisado. El estómago vacío y un ruido lejano de gemidos. Hay que moverse. A lo lejos ves una farmacia y un supermercado saqueado.",
+    opts:[
+      {t:"Ir a la farmacia (medicinas)", e:{food:-5,san:-3}, to:"farmacia"},
+      {t:"Rebuscar en el supermercado", e:{food:-5,san:-3}, to:"super"},
+      {t:"Quedarte y fortificar el refugio", e:{san:+5,food:-10}, to:"refugio"},
+    ]},
+  farmacia:{ tag:"Farmacia", text:"Estantes volcados, olor a desinfectante y sangre seca. Encuentras vendas y analgésicos, pero oyes pasos arrastrados detrás del mostrador.",
+    opts:[
+      {t:"Coger las medicinas en silencio", e:{hp:+25,san:-5}, to:"callejon"},
+      {t:"Disparar a lo que se mueve", e:{ammo:-20,hp:+10,san:-8}, to:"callejon"},
+      {t:"Salir corriendo sin nada", e:{san:-10,food:-5}, to:"callejon"},
+    ]},
+  super:{ tag:"Supermercado", text:"Pasillos oscuros. Latas de comida bajo un estante caído y una nevera con agua. También un cadáver fresco... demasiado fresco.",
+    opts:[
+      {t:"Llenar la mochila de comida", e:{food:+35,san:-5}, to:"callejon"},
+      {t:"Registrar el cadáver (quizá tenga balas)", e:{ammo:+25,san:-12,hp:-5}, to:"callejon"},
+      {t:"Beber agua y descansar un momento", e:{food:+15,san:+8,hp:+5}, to:"callejon"},
+    ]},
+  refugio:{ tag:"Refugio", text:"Clavas tablones en las ventanas. Te sientes más seguro, pero las provisiones menguan. Al anochecer, alguien golpea la puerta pidiendo ayuda.",
+    opts:[
+      {t:"Abrir y ayudar al desconocido", e:{san:+12,food:-15}, to:"superviviente"},
+      {t:"Ignorarlo y esperar en silencio", e:{san:-15}, to:"noche"},
+    ]},
+  callejon:{ tag:"Callejón", text:"Avanzas por un callejón entre dos edificios. Un grupo de supervivientes te apunta con un rifle desde una azotea. 'No queremos problemas', gritan.",
+    opts:[
+      {t:"Alzar las manos y hablar", e:{san:+5}, to:"superviviente"},
+      {t:"Ofrecer parte de tu comida", e:{food:-20,san:+10}, to:"superviviente"},
+      {t:"Apuntarles de vuelta", e:{ammo:-10,san:-10,hp:-10}, to:"noche"},
+    ]},
+  superviviente:{ tag:"Encuentro", text:"Es Marta, una enfermera. Dice conocer un asentamiento seguro al norte, pero el camino cruza una zona infestada. Propone ir juntos.",
+    opts:[
+      {t:"Viajar juntos al asentamiento", e:{san:+15,food:-10}, to:"horda"},
+      {t:"Robarle el mapa y seguir solo", e:{san:-25,food:+10}, to:"horda"},
+      {t:"Quedarte a descansar con ella una noche", e:{hp:+15,san:+10,food:-10}, to:"noche"},
+    ]},
+  noche:{ tag:"Noche cerrada", text:"La oscuridad lo cubre todo. Escuchas uñas arañando la madera. No dormirás. El miedo pesa más que el cansancio.",
+    opts:[
+      {t:"Montar guardia con el arma lista", e:{ammo:-10,san:-5,food:-5}, to:"horda"},
+      {t:"Esconderte y rezar en silencio", e:{san:-12,hp:-5}, to:"horda"},
+    ]},
+  horda:{ tag:"¡HORDA!", text:"El amanecer trae lo peor: una marea de infectados avanza calle abajo directa hacia ti. El suelo tiembla con sus pasos. Hay que decidir YA.",
+    opts:[
+      {t:"Abrirte paso disparando", e:{ammo:-35,hp:-20,san:-10}, to:"puente"},
+      {t:"Trepar a un edificio y esperar", e:{food:-15,san:-10}, to:"puente"},
+      {t:"Usar un coche como señuelo y huir", e:{san:-5,food:-10,hp:-5}, to:"puente"},
+    ]},
+  puente:{ tag:"El puente", text:"Llegas a un puente, el último paso antes del norte. Al otro lado ves luces y una valla militar. Pero el puente está medio derruido y hay movimiento debajo.",
+    opts:[
+      {t:"Cruzar corriendo sin mirar atrás", e:{hp:-15,san:-5}, to:"final_check"},
+      {t:"Gritar a los militares que te cubran", e:{ammo:-10,san:+10}, to:"final_check"},
+      {t:"Buscar otra ruta más larga y segura", e:{food:-20,hp:-5,san:-5}, to:"final_check"},
+    ]},
+  // nodo que elige final según recursos
+  final_check:{ resolve:true },
+};
+
+// ---------- Finales ----------
+const ENDINGS={
+  rescate:{ tag:"Final", title:"🪖 Rescatado por los militares", text:"Cruzas el puente y unas manos te arrastran al otro lado. Mantas, comida caliente, una cama. Lo lograste. Por primera vez en semanas, duermes sin miedo." },
+  lider:{ tag:"Final", title:"👑 Líder de un nuevo asentamiento", text:"Llegas fuerte, cuerdo y armado. La gente del norte ve en ti a alguien capaz. Con el tiempo, levantan muros, siembran campos. Te eligen para guiarlos. El mundo acabó, pero empieza algo nuevo." },
+  infectado:{ tag:"Game Over", title:"🧟 Infectado", text:"Un mordisco que creíste superficial. La fiebre sube. Tus manos tiemblan, tu vista se nubla. Lo último que piensas, antes de dejar de pensar, es que al menos lo intentaste." },
+  locura:{ tag:"Game Over", title:"🌑 Perdido en el páramo", text:"Tu mente se rompe antes que tu cuerpo. Hablas con los muertos, confías en sombras. Caminas sin rumbo hacia la nada, murmurando. El páramo se queda con otro." },
+  hambre:{ tag:"Game Over", title:"🥀 Muerto de inanición", text:"Sin comida ni agua, el cuerpo se apaga despacio. Te sientas, demasiado débil para seguir. Cierras los ojos. El silencio, por fin." },
+  desarmado:{ tag:"Game Over", title:"🔫 Sin munición, sin salida", text:"El arma hace clic en vacío. Los ves acercarse y no puedes hacer nada. Debiste gastar menos, o huir más. Ya da igual." },
+};
+
+function pickEnding(){
+  // si algún recurso crítico está al mínimo, ya habría muerto antes; aquí final por puntuación
+  const total=R.hp+R.food+R.ammo+R.san;
+  if(R.san>=60 && R.hp>=40 && R.ammo>=20 && total>=220) return "lider";
+  if(R.hp>=25 && total>=120) return "rescate";
+  // si llega débil, muere en el intento según su peor recurso
+  const worst=Object.entries(R).sort((a,b)=>a[1]-b[1])[0][0];
+  return {hp:"infectado",san:"locura",food:"hambre",ammo:"desarmado"}[worst];
+}
+
+// ---------- Render ----------
+function renderStats(){
+  const c=$("stats"); c.innerHTML="";
+  for(const m of META){
+    const v=Math.round(R[m.k]);
+    const d=document.createElement("div"); d.className="stat"+(v<=25?" low":"");
+    d.innerHTML=`<div class="row"><b>${m.emoji} ${m.name}</b><span>${v}%</span></div>
+      <div class="track"><i class="${m.cls}" style="width:${v}%"></i></div>`;
+    c.appendChild(d);
+  }
+}
+function applyEffects(e){
+  for(const k in e){ R[k]=Math.max(0,Math.min(100,R[k]+e[k])); }
+  renderStats();
+}
+function deadResource(){ // ¿algún recurso en 0?
+  for(const m of META) if(R[m.k]<=0) return m.k;
+  return null;
+}
+
+function renderScene(node){
+  const s=$("scene"); s.className="scene turn";
+  // reflow para reiniciar animación
+  void s.offsetWidth; s.classList.add("turn");
+  let html=`<span class="tag">${node.tag}</span><span class="day">Día ${day}</span>`;
+  html+=`<p class="narr">${node.text}</p><div class="opts">`;
+  node.opts.forEach((o,i)=>{
+    html+=`<button class="opt" data-i="${i}">${o.t}<span class="cost">${costText(o.e)}</span></button>`;
+  });
+  html+=`</div>`;
+  s.innerHTML=html;
+  s.querySelectorAll(".opt").forEach(b=>{
+    b.onclick=()=>choose(node, +b.dataset.i, b);
+  });
+}
+function costText(e){
+  return META.map(m=>{ const v=e[m.k]; if(!v)return null;
+    return `${m.emoji}${v>0?"+":""}${v}`; }).filter(Boolean).join("  ") || "sin coste";
+}
+
+function choose(node,i,btn){
+  const o=node.opts[i];
+  applyEffects(o.e);
+  floatDeltas(o.e, btn);
+  addLog(node.tag, o.t, o.e);
+  day++;
+  // ¿muerte inmediata por recurso a 0?
+  const dr=deadResource();
+  if(dr){ return endByZero(dr); }
+  setTimeout(()=>goto(o.to),250);
+}
+
+function goto(to, silent){
+  current=to;
+  if(to==="final_check"){ return showEnding(pickEnding()); }
+  const node=STORY[to];
+  renderScene(node);
+  if(!silent) window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function endByZero(k){
+  const map={hp:"infectado",san:"locura",food:"hambre",ammo:"desarmado"};
+  showEnding(map[k]);
+}
+
+function showEnding(key){
+  const e=ENDINGS[key];
+  const s=$("scene"); s.className="scene ending turn"; void s.offsetWidth; s.classList.add("turn");
+  s.innerHTML=`<span class="tag">${e.tag}</span>
+    <h2>${e.title}</h2>
+    <p class="narr">${e.text}</p>
+    <p style="color:var(--muted);font-size:.85rem">Sobreviviste ${day-1} días.
+      Salud ${Math.round(R.hp)} · Comida ${Math.round(R.food)} · Munición ${Math.round(R.ammo)} · Cordura ${Math.round(R.san)}.</p>
+    <button class="restart" id="btnRestart">🔄 Volver a intentar</button>`;
+  $("btnRestart").onclick=resetState;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+// ---------- Historial ----------
+function addLog(place, choice, e){
+  log.unshift({place,choice,e});
+  renderLog();
+}
+function renderLog(){
+  const ul=$("logList");
+  if(!log.length){ ul.innerHTML="<li>Aún no has tomado ninguna decisión.</li>"; return; }
+  ul.innerHTML=log.map(x=>{
+    const d=META.map(m=>{const v=x.e[m.k]; if(!v)return null;
+      return `<span class="${v>0?'up':'down'} delta">${m.emoji}${v>0?'+':''}${v}</span>`;}).filter(Boolean).join(" ");
+    return `<li><b>${x.place}:</b> ${x.choice} &nbsp; ${d}</li>`;
+  }).join("");
+}
+
+// animación flotante de cambios
+function floatDeltas(e,btn){
+  const rect=btn.getBoundingClientRect();
+  let off=0;
+  for(const m of META){ const v=e[m.k]; if(!v)continue;
+    const span=document.createElement("div");
+    span.className="float"; span.style.color=v>0?"#84cc16":"#ef4444";
+    span.textContent=`${m.emoji}${v>0?'+':''}${v}`;
+    span.style.left=(rect.left+10+off)+"px"; span.style.top=(rect.top-6)+"px";
+    document.body.appendChild(span); off+=52;
+    setTimeout(()=>span.remove(),1000);
+  }
+}
+
+// ---------- Inicio ----------
+resetState();
+</script>
+</body>
+</html>
